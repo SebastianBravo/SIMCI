@@ -7,5 +7,10 @@
 3D_U-Net/outputs/modelo
 3D_U-Net/outputs.zip
 Preprocesamiento/modelo_3d_unet
-Preprocesamiento/procesadas
+Preprocesamiento/dataset_n4_all_scores
+Preprocesamiento/dataset_brain_all_scores
 Preprocesamiento/DATA SET CORRECTED.zip
+Preprocesamiento/data_all_scores
+Preprocesamiento/data_all_scores_split
+Preprocesamiento/data_no_scores
+Preprocesamiento/data_no_scores_split

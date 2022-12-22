@@ -1,6 +1,5 @@
 import os
 import numpy as np
-import nibabel as nib
 import segmentation_models_3D as sm
 from keras import backend as K
 from keras.models import load_model
@@ -10,7 +9,6 @@ from matplotlib.widgets import Slider
 from scipy import ndimage as ndi
 from skimage import morphology
 from ttictoc import tic,toc
-from skimage.feature import canny
 
 """-------------------------Importación modelo CNN-------------------------"""
 # Métricas de desempeño
