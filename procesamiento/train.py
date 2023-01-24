@@ -19,7 +19,7 @@ for class_dir in os.listdir(data_dir):
     class_dir = os.path.join(data_dir, class_dir)
     if os.path.isdir(class_dir):
         data_files += [os.path.join(class_dir, file) for file in os.listdir(class_dir) if file.endswith('.npy')]
-
+data_files = np.array(data_files)
 
 # Parametros para generasión de datos
 gen_param = {'batch_size': 2,
@@ -27,7 +27,7 @@ gen_param = {'batch_size': 2,
           'num_workers': 4}
 
 # Número de épocas
-epochs = 10
+epochs = 1
 
 # Lista para almacenar scores de cada fold
 scores = []
@@ -43,7 +43,7 @@ for train_index, val_index in kfold.split(data_files):
     train_aug_set = torch.utils.data.ConcatDataset([train_set,train_set_shape,train_set_inte])
     
     # Para cada fold se define un dataset de validación
-    val_set = Dataset(data_files[train_index], shape_aug=False, intensity_aug=False) # No augmentation
+    val_set = Dataset(data_files[val_index], shape_aug=False, intensity_aug=False) # No augmentation
     
     # Dataloaders para entrenamiento y validación
     train_generator = torch.utils.data.DataLoader(train_aug_set, **gen_param)

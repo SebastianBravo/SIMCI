@@ -2,11 +2,33 @@ import numpy as np
 import random
 from volumentations import *
 from scipy.ndimage import gaussian_filter
+from scipy.ndimage import affine_transform
 
 # from matplotlib import pyplot as plt
 # from matplotlib.widgets import Slider
 
-class gaussian_blur_3d(Transform):
+def zoom_3d(input_array, zoom_factor):
+    zoom_matrix = np.array([[zoom_factor[0], 0, 0],
+                            [0, zoom_factor[1], 0],
+                            [0, 0, zoom_factor[2]]])
+    shape = input_array.shape
+    output_array = np.zeros(shape)
+    output_array = affine_transform(input_array, zoom_matrix, output_shape=shape, order=1)
+    return output_array
+
+class Zoom(DualTransform):
+    def __init__(self, zoom_factor_range, always_apply=False, p=1):
+        super().__init__(always_apply, p)
+        self.zoom_factor = np.random.uniform(zoom_factor_range[0], zoom_factor_range[1])
+        self.zoom_factor_tuple = (self.zoom_factor,self.zoom_factor,self.zoom_factor)
+
+    def apply(self, img):
+        return zoom_3d(img, self.zoom_factor_tuple)
+
+    def apply_to_mask(self, mask):
+        return zoom_3d(mask, self.zoom_factor_tuple)
+
+class GaussianBlur(Transform):
     def __init__(self, sigma_range=None, always_apply=False, p=1):
         super().__init__(always_apply, p)
         self.sigma_range = sigma_range
@@ -21,24 +43,24 @@ def get_augmentation(shape, intensity):
     shape_idx = random.randint(0,2) # Misma probabilidad para todas 
     shape_tran = [Rotate((-10, 10), (-10, 10), (-10, 10), p=1),
                   Flip(0, p=1),
-                  RandomScale((-0.1, 0.1), p=1)]
+                  Zoom((0.9, 1.1), p=1)]
     
     # Transformación de intensity a aplicar
-    inten_idx = random.randint(0,0) # Misma probabilidad para todas 
-    inten_tran = [GaussianNoise(var_limit=(10, 50), p=1),
-                  gaussian_blur_3d(sigma_range=(0,0.7), p=1)] # Revisar
+    inten_idx = random.randint(0,1) # Misma probabilidad para todas 
+    inten_tran = [GaussianNoise(var_limit=(0, 0.01), p=1), # Sigma = (0,0.4) # REVISAR CON WILSON
+                  GaussianBlur(sigma_range=(0,0.7), p=1)]
     
     # Lista transformaciones
     tran_list = []
     
     if shape == True:
         # Transformación flip horizontal    
-        # tran_list.append(shape_tran[shape_idx])
-        tran_list.append(shape_tran[2])
+        tran_list.append(shape_tran[shape_idx])
+        # tran_list.append(shape_tran[2])
     
     if intensity == True:
-        # tran_list.append(inten_tran[inten_idx])
-        tran_list.append(inten_tran[1])
+        tran_list.append(inten_tran[inten_idx])
+        # tran_list.append(inten_tran[0])
     
     return Compose(tran_list, p=1.0)
 
@@ -59,14 +81,14 @@ def get_augmentation(shape, intensity):
 # fig.suptitle('Comparación Máscaras Obtenidas')
 
 # axs[0].set_title('MRI original')
-# # axs[0].imshow(img[mri_slice,:,:],cmap='gray')
+# axs[0].imshow(img[mri_slice,:,:],cmap='gray')
 # # axs[0].imshow(img[:,mri_slice,:],cmap='gray')
-# axs[0].imshow(img[:,:,mri_slice],cmap='gray')
+# # axs[0].imshow(img[:,:,mri_slice],cmap='gray')
 
 # axs[1].set_title('Data augmentation')
-# # axs[1].imshow(aug_img[mri_slice,:,:],cmap='gray')
+# axs[1].imshow(aug_img[mri_slice,:,:],cmap='gray')
 # # axs[1].imshow(aug_img[:,mri_slice,:],cmap='gray')
-# axs[1].imshow(aug_img[:,:,mri_slice],cmap='gray')
+# # axs[1].imshow(aug_img[:,:,mri_slice],cmap='gray')
 
 # # Slider para cambiar slice
 # ax_slider = plt.axes([0.15, 0.05, 0.75, 0.03])

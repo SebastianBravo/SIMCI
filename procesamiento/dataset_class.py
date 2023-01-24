@@ -16,7 +16,7 @@ class Dataset(torch.utils.data.Dataset):
         return len(self.list_IDs)
 
   def __getitem__(self, index):
-        # Obejeto para realizar data augmentation
+        # Objeto para realizar data augmentation
         augmentation = get_augmentation(shape=self.shape_aug, intensity=self.intensity_aug)
         
         # Seleccionar una muestra del dataset
@@ -27,7 +27,7 @@ class Dataset(torch.utils.data.Dataset):
         
         # Cargar etiqueta de la muestra
         label_name = os.path.basename(os.path.dirname(self.list_IDs[index]))
-        label = 0 if label_name == 'CN' else 1
+        label = 0 if label_name == 'CN' else 1 # MCI 
         
         # aplicar data augmentation
         if self.shape_aug or self.intensity_aug: 
@@ -38,5 +38,3 @@ class Dataset(torch.utils.data.Dataset):
         else:
             return img, label
             
-        
-    
