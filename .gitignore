@@ -14,4 +14,5 @@ Preprocesamiento/data_all_scores
 Preprocesamiento/data_all_scores_split
 Preprocesamiento/data_no_scores
 Preprocesamiento/data_no_scores_split
-procesamiento/__pycache__
+Procesamiento/__pycache__
+Procesamiento/mednet_weights

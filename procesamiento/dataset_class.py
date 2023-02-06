@@ -34,7 +34,7 @@ class Dataset(torch.utils.data.Dataset):
             data = {'image': img}
             aug_img = augmentation(**data)['image']
             
-            return aug_img, label
+            return np.expand_dims(aug_img,axis=0), label
         else:
-            return img, label
+            return np.expand_dims(img,axis=0), label
             

@@ -36,8 +36,30 @@ class GaussianBlur(Transform):
     def apply(self, img):
         filter_size = random.randrange(3,8,step=2) # Selecciona un tamñano de filtro (3*3*3), (5*5*5), (7*7*7), 
         sigma = np.random.uniform(self.sigma_range[0], self.sigma_range[1]) # Selecciona un sigma aleatorio
-        return gaussian_filter(img, sigma=sigma, truncate=filter_size)
+        
+        mask = img.copy()
+        mask[mask>0] = 1
+        
+        return gaussian_filter(img, sigma=sigma, truncate=filter_size)*mask
 
+class CustomGaussianNoise(Transform):
+    def __init__(self, var_limit=None, always_apply=False, p=1):
+        super().__init__(always_apply, p)
+        self.var_limit = var_limit
+        
+    def apply(self, img):
+        var = np.random.uniform(self.var_limit[0], self.var_limit[1])
+        sigma = var**0.5
+        
+        gaussian_noise = np.random.normal(0, sigma, img.shape)
+        
+        noisy_img = np.clip(img + gaussian_noise, 0, 1).astype(np.float32)
+        
+        mask = img.copy()
+        mask[mask>0] = 1
+        
+        return noisy_img*mask
+    
 def get_augmentation(shape, intensity): 
     # Transformación de shape a aplicar
     shape_idx = random.randint(0,2) # Misma probabilidad para todas 
@@ -47,8 +69,8 @@ def get_augmentation(shape, intensity):
     
     # Transformación de intensity a aplicar
     inten_idx = random.randint(0,1) # Misma probabilidad para todas 
-    inten_tran = [GaussianNoise(var_limit=(0, 0.01), p=1), # Sigma = (0,0.4) # REVISAR CON WILSON
-                  GaussianBlur(sigma_range=(0,0.7), p=1)]
+    inten_tran = [CustomGaussianNoise(var_limit=(0, 0.00016), p=1), # Sigma = (0,0.4)
+                  GaussianBlur(sigma_range=(0,0.7), p=1)] # Aplicar solo a cerebro
     
     # Lista transformaciones
     tran_list = []
@@ -60,7 +82,7 @@ def get_augmentation(shape, intensity):
     
     if intensity == True:
         tran_list.append(inten_tran[inten_idx])
-        # tran_list.append(inten_tran[0])
+        # tran_list.append(inten_tran[1])
     
     return Compose(tran_list, p=1.0)
 
