@@ -1,4 +1,5 @@
 import os
+import wandb
 import torch
 import resnet
 import torchinfo
@@ -9,6 +10,10 @@ from torch import nn
 from torchsummary import summary
 from dataset_class import Dataset
 from sklearn.model_selection import KFold
+
+# Login para log de metricas
+wandb.login(key='d03749a4afd40541d752e73b1b8ef4d40358d4d1')
+os.environ["WANDB_SILENT"] = "true"
 
 # Path de dataset
 data_dir = '/HDDmedia/simci/datasets/data_no_scores_split/train'
@@ -25,15 +30,15 @@ data_files = np.array(data_files)
 # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 device_ids = [6,7]
 
-# Definición de modelo mednet
-mednet_model = resnet.resnet50(sample_input_D=192, sample_input_H=256, sample_input_W=256, num_seg_classes=2, no_cuda = False)
+# Weight path
+weight_path = '/HDDmedia/simci/SIMCI/Procesamiento/mednet_weights/resnet_50_23dataset.pth'
 
 # Clase para agregar capa totalmente conectada
 class simci_net(nn.Module):
-    def __init__(self, mednet_model):
+    def __init__(self):
         super(simci_net, self).__init__()
         
-        self.pretrained_model = mednet_model
+        self.pretrained_model = resnet.resnet50(sample_input_D=192, sample_input_H=256, sample_input_W=256, num_seg_classes=2, no_cuda = False)
         
         self.pretrained_model.conv_seg = nn.Sequential(nn.AdaptiveAvgPool3d(output_size=(1, 1, 1)),
                                                        nn.Flatten(start_dim=1))
@@ -47,43 +52,42 @@ class simci_net(nn.Module):
         
         return out
 
-# Definición modelo simci 
-simci_model = simci_net(mednet_model)
-
-# Diccionario state
-net_dict = simci_model.state_dict()
-
-# Cargar pesos
-weigth = torch.load('/HDDmedia/simci/SIMCI/Procesamiento/mednet_weights/resnet_50_23dataset.pth', map_location=torch.device('cpu'))
-
-# Transferencia de aprendizaje
-pretrain_dict = {k.replace("module.", ""): v for k, v in weigth['state_dict'].items() if k.replace("module.", "") in net_dict.keys()}
-net_dict.update(pretrain_dict)
-simci_model.load_state_dict(net_dict)
-
-# Summary sin bloquear parametros mednet
-torchinfo.summary(simci_model, (1,192, 256, 256), batch_dim = 0, col_names = ('input_size', 'output_size', 'num_params', 'trainable'), verbose = 0)
-
-# Bloqueo de parametros mednet
-for param in simci_model.pretrained_model.parameters():
-    param.requires_grad = False
-
-# Summary sin bloquear parametros mednet
-torchinfo.summary(simci_model, (1,192, 256, 256), batch_dim = 0, col_names = ('input_size', 'output_size', 'num_params', 'trainable'), verbose = 0)
-
-# Data parallel
-simci_model = torch.nn.DataParallel(simci_model, device_ids = device_ids)
-simci_model.to(f'cuda:{simci_model.device_ids[0]}')
-
+def init_model(weigth_path):
+    # Definición modelo simci 
+    simci_model = simci_net()
+    
+    # Diccionario state
+    net_dict = simci_model.state_dict()
+    
+    # Cargar pesos
+    weigth = torch.load(weigth_path, map_location=torch.device('cpu'))
+    
+    # Transferencia de aprendizaje
+    pretrain_dict = {k.replace("module.", ""): v for k, v in weigth['state_dict'].items() if k.replace("module.", "") in net_dict.keys()}
+    net_dict.update(pretrain_dict)
+    simci_model.load_state_dict(net_dict)
+    
+    # Summary sin bloquear parametros mednet
+    # torchinfo.summary(simci_model, (1,192, 256, 256), batch_dim = 0, col_names = ('input_size', 'output_size', 'num_params', 'trainable'), verbose = 0)
+    
+    # Bloqueo de parametros mednet
+    for param in simci_model.pretrained_model.parameters():
+        param.requires_grad = False
+        
+    # Summary bloqueando parametros mednet
+    # torchinfo.summary(simci_model, (1,192, 256, 256), batch_dim = 0, col_names = ('input_size', 'output_size', 'num_params', 'trainable'), verbose = 0)
+        
+    return simci_model
 '''-------------------------------------------------------------------------'''
+
 # Número de folds para k-fold cross-validation
-num_folds = 2
+num_folds = 10
 
 # Cración objeto para validación cruzada
 kfold = KFold(n_splits=num_folds, shuffle=True)
 
 # Parametros para generación de datos
-gen_param = {'batch_size': 2,
+gen_param = {'batch_size': 16,
           'shuffle': True,
           'num_workers': 8}
 
@@ -93,18 +97,44 @@ epochs = 2
 # Lista para almacenar scores de cada fold
 scores = dict() # [Presicion, recall, F1-score] --> (weighted macro f1 score), almacenar matríz confusión
 
-# Loss: Binary cross-entropy
-loss_func = nn.BCELoss()
-loss_func.to(f'cuda:{simci_model.device_ids[0]}')
-
-# Optimizador Adam
-learning_rate = 0.001
-optimizer = torch.optim.Adam(simci_model.parameters(), lr=learning_rate)
-
 # Ciclo de entrenamiento con validación cruzada
-fold_idx = 0
-for train_index, val_index in kfold.split(data_files):
-    print(f'Fold {fold_idx}/{num_folds}--------------------------------------')
+fold_idx = 1
+
+for train_index, val_index in kfold.split(data_files):  
+    print('Inicializando modelo...')
+    # Inicializar modelo
+    simci_model = init_model(weight_path)
+
+    # Data parallel
+    simci_model = torch.nn.DataParallel(simci_model, device_ids = device_ids)
+    simci_model.to(f'cuda:{simci_model.device_ids[0]}')
+    
+    # Loss: Binary cross-entropy
+    loss_func = nn.BCELoss()
+    loss_func.to(f'cuda:{simci_model.device_ids[0]}')
+
+    # Optimizador Adam
+    learning_rate = 0.001
+    optimizer = torch.optim.Adam(simci_model.parameters(), lr=learning_rate)
+
+    print('Modelo inicializado')
+    
+    print('Inicializando Dashboard...')
+    # Inicializar dashboard
+    wandb.init(
+      # Set the project where this run will be logged
+      project="Prueba", 
+      # We pass a run name (otherwise it’ll be randomly assigned, like sunshine-lollypop-10)
+      name=f"fold_{fold_idx}", 
+      # Track hyperparameters and run metadata
+      config={
+      "learning_rate": learning_rate,
+      "architecture": "CNN",
+      "epochs": epochs,
+      })
+    print('Dashboard inicializado')
+    
+    print(f'-------------------------------------------------------- Fold {fold_idx}/{num_folds} --------------------------------------------------------')
     # Para cada fold se define un dataset de entrenamiento por cada tipo de data augmentation
     train_set = Dataset(data_files[train_index], shape_aug=False, intensity_aug=False) # No augmentation
     train_set_shape = Dataset(data_files[train_index], shape_aug=True, intensity_aug=False) # Shape augmentation
@@ -126,8 +156,8 @@ for train_index, val_index in kfold.split(data_files):
         total_val_loss = 0.0
         
         n_batches = len(train_generator)
-        print(f'Epoch {epoch+1}/{epochs}')
-        pbar = tf.keras.utils.Progbar(target=n_batches)
+        print(f'Fold {fold_idx}/{num_folds} - Epoch {epoch+1}/{epochs}')
+        pbar = tf.keras.utils.Progbar(target=n_batches, stateful_metrics=["val_loss","val_f1_score","val_recall","val_precision"])
 
         # Ciclo de entreamiento
         simci_model.train()
@@ -141,25 +171,27 @@ for train_index, val_index in kfold.split(data_files):
             optimizer.step() # Actualizar pesos
             
             labels_npy = labels.detach().cpu().numpy().reshape(-1,1)
-            target_npy = target.detach().cpu().numpy()
+            target_npy = np.round(target.detach().cpu().numpy())
             
             total_train_loss += loss.item() # Suma de loss para cada batch
-            train_f1_score = metrics.f1_score(labels_npy, target_npy, average='weighted')
-            train_recall = metrics.recall_score(labels_npy, target_npy, average='weighted')
-            train_precision = metrics.precision_score(labels_npy, target_npy, average='weighted')
+            # train_f1_score = metrics.f1_score(labels_npy, target_npy, average='weighted')
+            # train_recall = metrics.recall_score(labels_npy, target_npy, average='weighted')
+            # train_precision = metrics.precision_score(labels_npy, target_npy, average='weighted')
             
-            pbar.update(i_batch, values=[("loss",loss.item()), 
-                                         ("f1_score", train_f1_score),
-                                         ("recall", train_recall),
-                                         ("precision", train_precision)]) # Actualizar barra de progreso
+            pbar.update(i_batch, values=[("loss",loss.item())]) 
+                                         # ("f1_score", train_f1_score),
+                                         # ("recall", train_recall),
+                                         # ("precision", train_precision)]) # Actualizar barra de progreso
         
-        train_loss = total_train_loss/len(train_generator)
+        train_loss = total_train_loss/n_batches
         
         # Ciclo de validación
         with torch.no_grad():
             simci_model.eval() # Modelo en modo evaluación
             
-            for i_batch, (data, labels) in enumerate(val_generator,1):
+            for i_batch, (data, labels) in enumerate(val_generator,0):
+                data, labels = data.to(f'cuda:{simci_model.device_ids[0]}'), labels.to(f'cuda:{simci_model.device_ids[0]}').float()
+                
                 predicted_labels = simci_model(data) # Predicciones
                 
                 val_loss = loss_func(predicted_labels.squeeze(-1),labels) # Calcular pérdida
@@ -180,14 +212,21 @@ for train_index, val_index in kfold.split(data_files):
             final_val_loss = total_val_loss/len(val_generator)
             val_f1_score = metrics.f1_score(total_labels, total_predictions, average='weighted')
             val_recall = metrics.recall_score(total_labels, total_predictions, average='weighted')
-            val_precision = metrics.precision_score(total_labels, total_predictions, average='weighted')
+            val_precision = metrics.precision_score(total_labels, total_predictions, average='weighted', zero_division=1)
             
         pbar.update(n_batches, values=[("val_loss",final_val_loss), 
                                        ("val_f1_score", val_f1_score),
                                        ("val_recall", val_recall),
-                                       ("val_precision", val_precision)]) # Actualizar barra de progreso       
+                                       ("val_precision", val_precision)]) # Actualizar barra de progreso 
+        
+        wandb.log({"train_loss": train_loss,
+                   "val_loss": final_val_loss, 
+                   "val_f1_score": val_f1_score,
+                   "val_recall": val_recall,
+                   "val_precision": val_precision})
 
-    print('-----------------------------------------------------------------')
+    print('---------------------------------------------------------------------------------------------------------------------------')
+    wandb.finish()
     fold_idx += 1
 
 """-------------------------------Test-------------------------------"""
