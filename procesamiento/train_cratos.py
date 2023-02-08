@@ -12,7 +12,7 @@ from dataset_class import Dataset
 from sklearn.model_selection import KFold
 
 # Login para log de metricas
-wandb.login(key='d03749a4afd40541d752e73b1b8ef4d40358d4d1')
+wandb.login(key='')
 os.environ["WANDB_SILENT"] = "true"
 
 # Path de dataset
